@@ -1,12 +1,10 @@
 Flask
 gunicorn
-service_account
-openpyxl
-XlsxWriter
+google-auth
+gspread
 PyPDF2
 pandas
-xlrd
+openpyxl
+XlsxWriter
 requests
 pycountry
-gspread
-
