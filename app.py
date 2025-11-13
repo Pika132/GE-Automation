@@ -9,6 +9,7 @@ import PyPDF2
 import io
 import csv
 import os
+import json
 
 app = Flask(__name__)
 
@@ -354,6 +355,7 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
 
