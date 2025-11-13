@@ -7,3 +7,4 @@ PyPDF2
 pandas
 xlrd
 requests
+pycountry
