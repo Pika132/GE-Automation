@@ -13,27 +13,11 @@ import json
 
 app = Flask(__name__)
 
-# Use credentials to create a client to interact with the Google Sheets API
-# Scopes required for Google Sheets & Drive
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets",
-          "https://www.googleapis.com/auth/drive"]
+scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
 
-# Load credentials
-if os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"):
-    # For deployment: JSON string in environment variable
-    credentials_info = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"))
-    credentials = service_account.Credentials.from_service_account_info(
-        credentials_info, scopes=SCOPES
-    )
-else:
-    # For local testing: use JSON file
-    credentials = service_account.Credentials.from_service_account_file(
-        "dhl-ge-213997707566.json", scopes=SCOPES
-    )
-
-# Authorize gspread client
+credentials_json = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"))
+credentials = service_account.Credentials.from_service_account_info(credentials_json)
 client = gspread.authorize(credentials)
-
 
 # Open the Google Sheet using the sheet name or the sheet key (if you have the sheet's URL)
 spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1THXb-qxNYQQ-13UuDxKUKM168qn7TqvkyDemh9hcbiI/edit?gid=0#gid=0")
@@ -355,6 +339,7 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
 
