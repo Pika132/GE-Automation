@@ -1,0 +1,7 @@
+Flask
+pandas
+PyPDF2
+gspread
+oauth2client
+pycountry
+gunicorn

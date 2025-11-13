@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PDF Extraction</title>
+    <style>
+        /* === Base Page === */
+        body {
+            font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+            background-color: #f5f7fa;
+            color: #2d3748;
+            margin: 0;
+            padding: 30px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1a202c;
+            margin-bottom: 25px;
+            font-weight: 600;
+            font-size: 1.8em;
+        }
+
+        /* === Toolbar (Top Controls) === */
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+
+        input[type="file"],
+        input[type="text"] {
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 14px;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
+        }
+
+        button {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            padding: 8px 16px;
+            font-size: 14px;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+
+        button:hover {
+            background-color: #2563eb;
+        }
+
+        button:active {
+            transform: scale(0.97);
+        }
+
+        /* === Table === */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+            font-size: 14px;
+        }
+
+        th, td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: top;
+        }
+
+        th {
+            background-color: #f3f4f6;
+            color: #374151;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 13px;
+        }
+
+        tr:hover {
+            background-color: #f9fafb;
+        }
+
+        tr:nth-child(even) {
+            background-color: #fcfcfc;
+        }
+
+        td[contenteditable="true"] {
+            background-color: #fffbea;
+            border-radius: 4px;
+            outline: none;
+        }
+
+        td.pre-line {
+            white-space: pre-line;
+        }
+
+        .invalid-address {
+            background-color: #ffe0e0 !important;
+            border: 1px solid #ffb3b3;
+        }
+
+        /* === Checklist Button (Inside Table) === */
+        td button {
+            background-color: #6b7280;
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+
+        td button:hover {
+            background-color: #4b5563;
+        }
+
+        /* === Responsive tweaks === */
+        @media (max-width: 768px) {
+            body {
+                padding: 15px;
+            }
+
+            table {
+                font-size: 12px;
+            }
+
+            th, td {
+                padding: 8px;
+            }
+
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <h1>📄 PDF Extraction Results</h1>
+
+    <div class="toolbar">
+        <form method="POST" enctype="multipart/form-data">
+            <input type="file" name="pdf_files" multiple required>
+            <button type="submit">Upload PDFs</button>
+        </form>
+        <button onclick="window.location.href='/view_sheet'">View Google Sheet Data</button>
+        <input type="text" id="signature" placeholder="Enter your signature">
+        <button onclick="downloadTSV()">Download TSV</button>
+    </div>
+
+    {% if all_extracted_info %}
+        <button onclick="downloadXLSX()">💾 Download XLSX</button>
+
+        <table id="data-table">
+            <thead>
+                <tr>
+                    <th>DN Number</th>
+                    <th>Consignee Address</th>
+                    <th>Item Code</th>
+                    <th>Total Number of Containers</th>
+                    <th>Total Item Weight</th>
+                    <th>Total Item</th>
+                    <th>Total Boxes</th>
+                    <th>Total Units</th>
+                    <th>Total Weight</th>
+                    <th>UN Number</th>
+                    <th>IATA UN Hazard Class</th>
+                    <th>Packing Group</th>
+                    <th>IATA Packing Instructions</th>
+                    <th>UN Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for info in all_extracted_info %}
+                    {% set items = info.get('Item Numbers', []) %}
+                    {% set boxes = info.get('Boxes', []) %}
+
+                    {% if not boxes %}
+                        <tr>
+                            <td contenteditable="true">{{ info['Filename'].split('.pdf')[0] }}</td>
+                            <td class="pre-line" contenteditable="true">{{ info.get('Ship To','') }}</td>
+                            <td contenteditable="true"></td>
+                            <td contenteditable="true"></td>
+                            <td contenteditable="true"></td>
+                            <td contenteditable="true"></td>
+                            <td contenteditable="true"></td>
+                            <td contenteditable="true"></td>
+                            <td contenteditable="true"></td>
+                            <td contenteditable="true"></td>
+                            <td contenteditable="true"></td>
+                            <td contenteditable="true"></td>
+                            <td contenteditable="true"></td>
+                            <td contenteditable="true"></td>
+                        </tr>
+                    {% else %}
+                        {% set un_values = [
+                            info['UN Number'][0]|replace('UN','') if info.get('UN Number') else '-',
+                            info['IATA UN Hazard Class'][0] if info.get('IATA UN Hazard Class') else '-',
+                            info['Packing Group'][0] if info.get('Packing Group') else '-',
+                            info['IATA Packing Instructions'][0] if info.get('IATA Packing Instructions') else '-',
+                            info['UN Description'][0] if info.get('UN Description') else '-'
+                        ] %}
+
+                        {% for b in boxes %}
+                            <tr>
+                                {% if loop.first %}
+                                    <!-- Merge common info for this delivery -->
+                                    <td rowspan="{{ boxes|length }}">
+                                        <div>
+                                            <span contenteditable="true">{{ info['Filename'].split('.pdf')[0] }}</span>
+                                            <button type="button" onclick="toggleChecklist('{{ info['Delivery']|default(info['Filename'].split('.pdf')[0]) }}', this)">Mark Checklist</button>
+                                        </div>
+                                    </td>
+
+                                    <td class="pre-line" rowspan="{{ boxes|length }}" contenteditable="true">{{ info.get('Ship To','').replace('\n','\r\n') }}</td>
+                                    <td rowspan="{{ boxes|length }}" contenteditable="true">
+                                        {% if items %}{{ items|join(', ') }}{% endif %}
+                                    </td>
+                                    <td rowspan="{{ boxes|length }}" contenteditable="true">{{ info.get('Total Containers','') }}</td>
+                                    <td rowspan="{{ boxes|length }}" contenteditable="true">{{ info.get('Net Weight (kg)','') }}</td>
+                                    <td rowspan="{{ boxes|length }}" contenteditable="true">{{ info.get('Total Qty/LPN','') }}</td>
+                                {% endif %}
+
+                                <!-- Show merged boxes -->
+                                <td contenteditable="true">{{ b['Total Boxes'] }}</td>
+                                <td contenteditable="true">{{ b['Units'] }}</td>
+                                <td contenteditable="true">{{ b['Weight'] }}</td>
+
+                                <!-- UN info (same for all boxes) -->
+                                {% if loop.first %}
+                                    <td rowspan="{{ boxes|length }}" contenteditable="true">{{ un_values[0] }}</td>
+                                    <td rowspan="{{ boxes|length }}" contenteditable="true">{{ un_values[1] }}</td>
+                                    <td rowspan="{{ boxes|length }}" contenteditable="true">{{ un_values[2] }}</td>
+                                    <td rowspan="{{ boxes|length }}" contenteditable="true">{{ un_values[3] }}</td>
+                                    <td rowspan="{{ boxes|length }}" contenteditable="true">{{ un_values[4] }}</td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    {% endif %}
+                {% endfor %}
+
+            </tbody>
+
+
+        </table>
+
+        <script>
+        function downloadXLSX() {
+            var data = [];
+            var table = document.getElementById("data-table");
+            var headers = [];
+
+            // Get headers
+            table.querySelectorAll("thead th").forEach(th => headers.push(th.innerText));
+
+            // Get rows
+            table.querySelectorAll("tbody tr").forEach(tr => {
+                var row = {};
+                tr.querySelectorAll("td").forEach((td, i) => {
+                    row[headers[i]] = td.innerText;
+                });
+                data.push(row);
+            });
+
+            var ws = XLSX.utils.json_to_sheet(data, {cellDates:true});
+
+            // Ensure line breaks work in Excel
+            Object.keys(ws).forEach(function(key) {
+                if(ws[key].v && typeof ws[key].v === "string") {
+                    ws[key].v = ws[key].v.replace(/\r?\n/g, "\r\n");
+                }
+            });
+
+            var wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+            XLSX.writeFile(wb, "extracted_data.xlsx");
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            // Pattern that ALLOWS only: A–Z, a–z, digits, whitespace, comma, dot, slash, ampersand, hyphen, parentheses
+            // NOTE: it will now flag accented letters like í, é, ü, ñ, etc. as invalid
+            const disallowedPattern = /[^A-Za-z0-9\s,./&()\-\n\r]/;
+
+            const addressCells = document.querySelectorAll("td.pre-line");
+
+            addressCells.forEach(cell => {
+                const text = cell.innerText.trim();
+                if (text && disallowedPattern.test(text)) {
+                    cell.classList.add("invalid-address");
+                    cell.title = "⚠️ Contains special or non-standard characters (e.g., í)";
+                }
+            });
+        });
+
+        function toggleChecklist(delivery, btn) {
+            if (checklistDeliveries.has(delivery)) {
+                checklistDeliveries.delete(delivery);
+                btn.style.backgroundColor = "";
+                btn.textContent = "Mark Checklist";
+            } else {
+                checklistDeliveries.add(delivery);
+                btn.style.backgroundColor = "#90ee90"; // light green
+                btn.textContent = "✓ Checklist Added";
+            }
+        }
+
+        // Modify the existing downloadTSV() to include checklist deliveries
+        function downloadTSV() {
+            const signature = document.getElementById('signature').value.trim();
+
+            if (!signature) {
+                alert("⚠️ Please enter your signature before exporting TSV.");
+                return;
+            }
+
+            // Include checklist deliveries as JSON string
+            const checklistParam = encodeURIComponent(JSON.stringify([...checklistDeliveries]));
+            const encodedSignature = encodeURIComponent(signature);
+
+            window.location.href = `/download_tsv?signature=${encodedSignature}&checklist=${checklistParam}`;
+        }
+            // Store deliveries that require a checklist
+            const checklistDeliveries = new Set();
+
+        </script>
+    {% endif %}
+</body>
+</html>

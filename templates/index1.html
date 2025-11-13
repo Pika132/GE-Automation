@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Extractor</title>
+</head>
+<body>
+    <h1>Upload PDF to Extract Text</h1>
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="pdf_file" accept="application/pdf" required>
+        <button type="submit">Upload</button>
+    </form>
+
+    {% if extracted_text %}
+        <h2>Extracted Text:</h2>
+        <pre>{{ extracted_text }}</pre>
+    {% endif %}
+</body>
+</html>

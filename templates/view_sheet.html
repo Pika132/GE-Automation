@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Google Sheet Data</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        input[type="text"] { width: 95%; padding: 4px; }
+        button { padding: 6px 12px; margin-top: 8px; cursor: pointer; }
+        .message { margin-top: 10px; font-weight: bold; color: green; }
+        a { display: inline-block; margin-bottom: 10px; text-decoration: none; color: #0066cc; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <a href="/">← Back to PDF Extraction</a>
+    <h1>Google Sheet Data</h1>
+
+    {% if message %}
+        <p class="message">{{ message }}</p>
+    {% endif %}
+
+    <table>
+        <thead>
+            <tr>
+                {% for h in headers %}
+                    <th>{{ h }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+                <tr>
+                    {% for cell in row %}
+                        <td>{{ cell }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Add New Row</h2>
+    <form method="POST">
+        <table>
+            <tr>
+                {% for h in headers %}
+                    <td><input type="text" name="{{ h }}" placeholder="{{ h }}"></td>
+                {% endfor %}
+            </tr>
+        </table>
+        <button type="submit">Add Row</button>
+    </form>
+</body>
+</html>
