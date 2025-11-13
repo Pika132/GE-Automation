@@ -12,9 +12,19 @@ import csv
 app = Flask(__name__)
 
 # Use credentials to create a client to interact with the Google Sheets API
+# Use credentials to create a client to interact with the Google Sheets API
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-credentials = ServiceAccountCredentials.from_json_keyfile_name(
-    "dhl-ge-213997707566.json", scope)
+
+import os, json
+
+# Try to load credentials from environment variable (for deployment)
+if os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"):
+    credentials_json = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"))
+    credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_json, scope)
+else:
+    # Fallback: use local JSON file for local testing
+    credentials = ServiceAccountCredentials.from_json_keyfile_name("dhl-ge-213997707566.json", scope)
+
 client = gspread.authorize(credentials)
 
 # Open the Google Sheet using the sheet name or the sheet key (if you have the sheet's URL)
@@ -337,4 +347,5 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
