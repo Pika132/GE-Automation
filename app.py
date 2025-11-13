@@ -13,10 +13,14 @@ import json
 
 app = Flask(__name__)
 
-scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
+scope = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
 
 credentials_json = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"))
-credentials = service_account.Credentials.from_service_account_info(credentials_json)
+credentials = service_account.Credentials.from_service_account_info(credentials_json, scopes=scope)
 client = gspread.authorize(credentials)
 
 # Open the Google Sheet using the sheet name or the sheet key (if you have the sheet's URL)
@@ -339,6 +343,7 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
 
