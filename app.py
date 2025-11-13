@@ -297,7 +297,46 @@ def download_tsv():
     response.headers["Content-Disposition"] = "attachment; filename=shipment_data.tsv"
     return response
 
+def load_google_sheet():
+    """Reload the Google Sheet and return a DataFrame."""
+    sheet = spreadsheet.sheet1
+    headers = sheet.row_values(1)
+    headers = [header for header in headers if header.strip()]
+    headers = list(dict.fromkeys(headers))
+    data = sheet.get_all_records(expected_headers=headers)
+    return pd.DataFrame(data)
 
+@app.route('/view_sheet', methods=['GET', 'POST'])
+def view_sheet():
+    """View and add rows to Google Sheet data."""
+    # Reload the Google Sheet into a DataFrame
+    df = load_google_sheet()
+
+    # If there's no data, show a warning
+    if df.empty:
+        return render_template('view_sheet.html', message="⚠️ The Google Sheet is empty or headers are missing.")
+
+    # Get headers and rows for the table
+    headers = df.columns.tolist()
+    rows = df.values.tolist()
+
+    # If POST request, add a new row to the Google Sheet
+    if request.method == 'POST':
+        # Create a dictionary from the form data
+        new_row = {header: request.form.get(header, '') for header in headers}
+
+        # Append the new row to the sheet (using gspread)
+        sheet = spreadsheet.sheet1
+        sheet.append_row([new_row.get(header, '') for header in headers])
+
+        # Reload the Google Sheet after adding the row
+        df = load_google_sheet()
+        rows = df.values.tolist()
+        return render_template('view_sheet.html', message="✅ Row added successfully!", headers=headers, rows=rows)
+
+    # Render the sheet data with the form
+    return render_template('view_sheet.html', headers=headers, rows=rows)
+    
 # Flask route for processing PDF and displaying extracted data
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -346,6 +385,7 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
 
