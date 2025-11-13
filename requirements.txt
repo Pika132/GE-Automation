@@ -1,6 +1,6 @@
 Flask
 gunicorn
-oauth2client
+service_account
 openpyxl
 XlsxWriter
 PyPDF2
@@ -9,3 +9,4 @@ xlrd
 requests
 pycountry
 gspread
+
