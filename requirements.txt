@@ -8,3 +8,6 @@ pandas
 xlrd
 requests
 pycountry
+gspread
+io
+csv
