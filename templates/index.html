@@ -163,6 +163,7 @@
         <button onclick="window.location.href='/view_sheet'">View Google Sheet Data</button>
         <input type="text" id="signature" placeholder="Enter your signature">
         <button onclick="downloadTSV()">Download TSV</button>
+        <button onclick="recalculateMarked()">Recalculate Marked</button>
     </div>
 
     {% if all_extracted_info %}
@@ -224,8 +225,18 @@
                                     <!-- Merge common info for this delivery -->
                                     <td rowspan="{{ boxes|length }}">
                                         <div>
+                                            <!-- Delivery note filename -->
                                             <span contenteditable="true">{{ info['Filename'].split('.pdf')[0] }}</span>
-                                            <button type="button" onclick="toggleChecklist('{{ info['Delivery']|default(info['Filename'].split('.pdf')[0]) }}', this)">Mark Checklist</button>
+
+                                            <!-- Mark Checklist Button -->
+                                            <button type="button" onclick="toggleChecklist('{{ info['Delivery']|default(info['Filename'].split('.pdf')[0]) }}', this)">
+                                                Mark Checklist
+                                            </button>
+
+                                            <!-- Mark for Recalculation Button -->
+                                            <button type="button" onclick="toggleRecalculate('{{ info['Filename'].split('.pdf')[0] }}', this)">
+                                                Mark for Recal
+                                            </button>
                                         </div>
                                     </td>
 
@@ -239,9 +250,9 @@
                                 {% endif %}
 
                                 <!-- Show merged boxes -->
-                                <td contenteditable="true">{{ b['Total Boxes'] }}</td>
-                                <td contenteditable="true">{{ b['Units'] }}</td>
-                                <td contenteditable="true">{{ b['Weight'] }}</td>
+                                <td contenteditable="true">{{ b['Weight'] }}</td>  <!-- Total Item Weight -->
+                                <td contenteditable="true">{{ b['Units'] }}</td>   <!-- Total Units -->
+                                <td contenteditable="true">{{ b['Weight'] }}</td>  <!-- Total Weight -->
 
                                 <!-- UN info (same for all boxes) -->
                                 {% if loop.first %}
@@ -338,6 +349,39 @@
         }
             // Store deliveries that require a checklist
             const checklistDeliveries = new Set();
+            
+            // Function to toggle "Mark for Recalculation" button
+            function toggleRecalculate(delivery, btn) {
+                const row = btn.closest('tr'); // Get the row containing the button
+                const isMarked = row.classList.toggle('marked-for-recalculation'); // Toggle the 'marked-for-recalculation' class
+
+                if (isMarked) {
+                    // If marked, change the button text to "Unmark for Recalculation"
+                    btn.textContent = "Unmark for Recal";
+                    btn.style.backgroundColor = "#90ee90"; // Light green to indicate the row is marked
+                } else {
+                    // If unmarked, change the button text back to "Mark for Recalculation"
+                    btn.textContent = "Mark for Recal";
+                    btn.style.backgroundColor = ""; // Reset background color
+                }
+            }
+
+            // Function to recalculate Total Weight for all marked rows
+            function recalculateMarked() {
+                const rows = document.querySelectorAll('tr.marked-for-recalculation'); // Get all rows marked for recalculation
+
+                rows.forEach(row => {
+                    // Get the values for Total Item Weight and Total Units
+                    const totalItemWeight = parseFloat(row.querySelector('td:nth-child(5)').innerText) || 0;
+                    const totalUnits = parseInt(row.querySelector('td:nth-child(8)').innerText) || 0;
+
+                    // Calculate the Total Weight
+                    const totalWeight = totalItemWeight * totalUnits;
+
+                    // Update the Total Weight cell (assuming Total Weight is in the 9th column)
+                    row.querySelector('td:nth-child(9)').innerText = totalWeight.toFixed(2); // Update the Total Weight cell
+                });
+            }
 
         </script>
     {% endif %}
