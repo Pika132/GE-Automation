@@ -296,14 +296,14 @@ def download_tsv_post():
                 # Evaluate PAX based on IATA table
             iata_max_pax_qty = None
             try:
-                filtered_iata = iata_df.loc[iata_df['UN_Number'] == int(un), 'Maximum quantity for PAX']
+                filtered_iata = iata_df.loc[iata_df['UN_Number'] == un_int, 'Maximum quantity for PAX']
                 if not filtered_iata.empty:
                     iata_max_pax_qty = float(filtered_iata.iloc[0])
                 # Compare with weight
                 if iata_max_pax_qty is not None and weight < iata_max_pax_qty:
                     mode_of_transport = "PASSENGER (AIR)"
             except Exception as e:
-                logging.error(f"IATA lookup error for UN {un}: {e}")
+                logging.error(f"IATA lookup error for UN {un_int}: {e}")
         # Add main shipment row
         row = {
             "Job Description": "GE Healthcare",
@@ -448,6 +448,7 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
 
