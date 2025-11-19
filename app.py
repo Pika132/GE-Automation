@@ -2,25 +2,32 @@
 import re
 import pycountry
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2 import service_account
 import pandas as pd
 from flask import Flask, request, render_template, Response
 import PyPDF2
 import io
 import csv
-import logging
+import os
+import json
 
 app = Flask(__name__)
 
-# Use credentials to create a client to interact with the Google Sheets API
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-credentials = ServiceAccountCredentials.from_json_keyfile_name(
-    "dhl-ge-45015f5ea40d.json", scope)
+scope = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
+# Load credentials from environment variable
+credentials_json = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"))
+credentials = service_account.Credentials.from_service_account_info(credentials_json, scopes=scope)
 client = gspread.authorize(credentials)
 
-# Open the Google Sheet using the sheet name or the sheet key (if you have the sheet's URL)
-spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1THXb-qxNYQQ-13UuDxKUKM168qn7TqvkyDemh9hcbiI/edit?gid=0#gid=0")
-sheet = spreadsheet.sheet1  # You can also specify the sheet name instead of .sheet1
+# Open your Google Sheet
+spreadsheet = client.open_by_url(
+    "https://docs.google.com/spreadsheets/d/1THXb-qxNYQQ-13UuDxKUKM168qn7TqvkyDemh9hcbiI/edit?gid=0"
+)
+sheet = spreadsheet.sheet1
 
 # Load the sheet into a pandas DataFrame
 headers = sheet.row_values(1)  # Get the first row (header row)
