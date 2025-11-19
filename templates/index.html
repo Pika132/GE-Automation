@@ -161,6 +161,7 @@
             <button type="submit">Upload PDFs</button>
         </form>
         <button onclick="window.location.href='/view_sheet'">View Google Sheet Data</button>
+        <input type="text" id="user" placeholder="Enter DHL User">
         <input type="text" id="signature" placeholder="Enter your signature">
         <button onclick="downloadTSV()">Download TSV</button>
         <button onclick="recalculateMarked()">Recalculate Marked</button>
@@ -314,18 +315,36 @@
         2. ADDRESS VALIDATION
         =========================== */
         document.addEventListener("DOMContentLoaded", function () {
-            const disallowedPattern = /[^A-Za-z0-9\s,./&()\-\n\r]/;
+            const allowedPattern = /^[\p{L}\p{N}\s,.:\/&()\-]+$/u;  
             const addressCells = document.querySelectorAll("td.pre-line");
 
             addressCells.forEach(cell => {
-                const text = cell.innerText.trim();
-                if (text && disallowedPattern.test(text)) {
-                    cell.classList.add("invalid-address");
-                    cell.title = "⚠️ Contains special or non-standard characters (e.g., í)";
-                }
-            });
-        });
+                cell.addEventListener("input", function () {
+                    validateAddress(cell);
+                });
 
+                // Validate initial content
+                validateAddress(cell);
+            });
+
+            function validateAddress(cell) {
+                const text = cell.innerText.trim();
+
+                if (!text) {
+                    cell.classList.remove("invalid-address");
+                    cell.removeAttribute("title");
+                    return;
+                }
+
+                if (!allowedPattern.test(text)) {
+                    cell.classList.add("invalid-address");
+                    cell.title = "⚠️ Contains unsupported characters";
+                } else {
+                    cell.classList.remove("invalid-address");
+                    cell.removeAttribute("title");
+                }
+            }
+        });
 
         /* ===========================
         3. CHECKLIST TOGGLE
@@ -355,6 +374,11 @@
                 return;
             }
 
+            const user = document.getElementById('user').value.trim();
+            if (!user) {
+                alert("⚠️ Please enter your user before exporting TSV.");
+                return;
+            }
             const table = document.getElementById("data-table");
             const headers = Array.from(table.querySelectorAll("thead th")).map(th => th.innerText.trim());
             const tableData = [];
@@ -372,6 +396,7 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     signature: signature,
+                    user: user,
                     checklist: [...checklistDeliveries],
                     table_data: tableData
                 })
