@@ -2,33 +2,25 @@
 import re
 import pycountry
 import gspread
-from google.oauth2 import service_account
+from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 from flask import Flask, request, render_template, Response
 import PyPDF2
 import io
 import csv
-import os
-import json
+import logging
 
 app = Flask(__name__)
 
-scope = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-
-# Load credentials from environment variable
-credentials_json = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"))
-credentials = service_account.Credentials.from_service_account_info(credentials_json, scopes=scope)
+# Use credentials to create a client to interact with the Google Sheets API
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+credentials = ServiceAccountCredentials.from_json_keyfile_name(
+    "dhl-ge-45015f5ea40d.json", scope)
 client = gspread.authorize(credentials)
 
-# Open your Google Sheet
-spreadsheet = client.open_by_url(
-    "https://docs.google.com/spreadsheets/d/1THXb-qxNYQQ-13UuDxKUKM168qn7TqvkyDemh9hcbiI/edit?gid=0"
-)
-sheet = spreadsheet.sheet1
-
+# Open the Google Sheet using the sheet name or the sheet key (if you have the sheet's URL)
+spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1THXb-qxNYQQ-13UuDxKUKM168qn7TqvkyDemh9hcbiI/edit?gid=0#gid=0")
+sheet = spreadsheet.sheet1  # You can also specify the sheet name instead of .sheet1
 
 # Load the sheet into a pandas DataFrame
 headers = sheet.row_values(1)  # Get the first row (header row)
@@ -213,61 +205,117 @@ consignee_address = """GE Healthcare Global Parts Company Inc
 C/O DHL Global Forwarding (S) Pte Ltd
 40 Alps Avenue 3rd floor
 Singapore 498781 SG"""
-    
-@app.route('/download_tsv')
-def download_tsv():
-    global all_extracted_info_cache
 
-    signature = request.args.get('signature', '').strip()
-    checklist_param = request.args.get('checklist', '[]')
-    try:
-        import json
-        checklist_deliveries = set(json.loads(checklist_param))
-    except Exception:
-        checklist_deliveries = set()
+TSV_HEADERS = [
+    "","Ship to","Job Description", "Shipper", "Consignee", "Shipper Reference Number", 
+    "Shipment Type", "UN or ID NO.", "Proper shipping name", "Packing Group",
+    "PCS/AP Qty", "Type of Packing", "Weight", "Pack", "Label Marking", 
+    "OP Qty", "Auth", "User", "Reference Number", "Remarks (CS)", 
+    "Pickp Address", "Ship To Address", "Mode of Transport", 
+    "Services", "Service Qty", "Signature"
+]
 
-    if not all_extracted_info_cache:
-        return "⚠️ No data available. Please upload PDFs first.", 400
+@app.route('/download_tsv', methods=['POST'])
+def download_tsv_post():
+    data = request.get_json()
+    if not data:
+        return "⚠️ No data received.", 400
+
+    signature = data.get("signature", "")
+    checklist_deliveries = set(data.get("checklist", []))
+    table_data = data.get("table_data", [])
+
+    if not table_data:
+        return "⚠️ No table data available.", 400
 
     rows = []
-    processed_deliveries = set()
 
-    for info in all_extracted_info_cache:
-        delivery = info.get("Delivery", "")
+    processed_deliveries = set()
+    for info in table_data:
+        full_dn = info.get("DN NUMBER", "").strip()
+        delivery_match = re.match(r"(\d+)", full_dn)
+        delivery = delivery_match.group(1) if delivery_match else full_dn
+        total_boxes = int(info.get("TOTAL BOXES", 0) or 0)
+        weight = float(info.get("TOTAL WEIGHT", 0) or 0)
 
         first_occurrence = delivery not in processed_deliveries
+        un = str(info.get("UN NUMBER", "")).strip()
 
-        # Add all boxes for this delivery
-        for i, b in enumerate(info.get("Boxes", [])):
-            row = {
-                "Job Description": "GE Healthcare",
-                "Shipper": consignee_address,
-                "Consignee": info.get("Ship To", ""),
-                "Shipper Reference Number": delivery,
-                "Shipment Type": "Non Radioactive",
-                "UN or ID NO.": (info.get("UN Number") or [""])[0],
-                "Proper shipping name": (info.get("UN Description") or [""])[0],
-                "Packing Group": (info.get("Packing Group") or [""])[0],
-                "PCS/AP Qty": b.get("Total Boxes", ""),
-                "Type of Packing": "Fibreboard Box",
-                "Weight": b.get("Weight", ""),
-                "Pack": "OP",
-                "Label Marking": delivery,
-                "OP Qty": "1",
-                "Auth": "IB",
-                "User": "",
-                "Reference Number": delivery,
-                "Remarks (CS)": "Max net 10kg. CAO, Battery Label, Handling Label",
-                "Pickp Address": "-",
-                "Ship To Address": ship_address,
-                "Mode of Transport": "Cargo (Air)",
-                # Only add DG Declaration for the first box of first occurrence
-                "Services": "DG Declaration" if first_occurrence and i == 0 else "",
-                "Service Qty": 1 if first_occurrence and i == 0 else "",
-                "Signature": signature
-            }
-            rows.append(row)
+            # Compute auth_value from IATA Packing Instructions
+        packing_instructions = str(info.get("IATA Packing Instructions", "")).upper()
+        auth_value = "IB" if packing_instructions and ("II" in packing_instructions or "IB" in packing_instructions) else ""
 
+            # Determine Remarks (CS)
+        try:
+            un_int = int(un)
+        except:
+            un_int = None
+
+        if un_int == 3480 and auth_value == "IB":
+            remarks_cs = "Max net 10kg. CAO, Battery Label, Handling Label"
+        elif un_int == 3480 and auth_value == "":
+            remarks_cs = "Max net 35kg. CAO & Battery Label"
+        elif un_int == 3090 and auth_value == "":
+            remarks_cs = "Max net 35kg. CAO & Battery Label"
+        elif un_int == 3090 and auth_value == "IB":
+            remarks_cs = "Max net 2.5kg. CAO, Battery Label, Handling Label"
+        elif un_int == 1950 and auth_value == "IB":
+            remarks_cs = "Max net 75kg"
+        elif un_int == 1950 and auth_value == "":
+            remarks_cs = "Max net 75kg"
+        elif un_int == 3164 and auth_value == "":
+            remarks_cs = "Max net no limit. Class 2.2 Label"
+        elif un_int == 3164 and auth_value == "IB":
+            remarks_cs = "Max net no limit. Class 2.2 Label"
+        else:
+            remarks_cs = ""
+
+            # Determine Mode of Transport
+        mode_of_transport = "Cargo (Air)"
+
+        if un_int in [3090, 3480, 3164]:
+                # Always cargo
+            pass
+        else:
+                # Evaluate PAX based on IATA table
+            iata_max_pax_qty = None
+            try:
+                filtered_iata = iata_df.loc[iata_df['UN_Number'] == int(un), 'Maximum quantity for PAX']
+                if not filtered_iata.empty:
+                    iata_max_pax_qty = float(filtered_iata.iloc[0])
+                # Compare with weight
+                if iata_max_pax_qty is not None and weight < iata_max_pax_qty:
+                    mode_of_transport = "PASSENGER (AIR)"
+            except Exception as e:
+                logging.error(f"IATA lookup error for UN {un}: {e}")
+        # Add main shipment row
+        row = {
+            "Job Description": "GE Healthcare",
+            "Shipper": consignee_address,
+            "Consignee": info.get("CONSIGNEE ADDRESS", ""),
+            "Shipper Reference Number": delivery,
+            "Shipment Type": "Non Radioactive",
+            "UN or ID NO.": info.get("UN NUMBER", ""),
+            "Proper shipping name": info.get("UN DESCRIPTION", ""),
+            "Packing Group": info.get("PACKING GROUP", ""),
+            "PCS/AP Qty": total_boxes,
+            "Type of Packing": "Fibreboard Box",
+            "Weight": weight,
+            "Pack": "OP",
+            "Label Marking": delivery,
+            "OP Qty": "1",
+            "Auth": auth_value,
+            "User": "",
+            "Reference Number": delivery,
+            "Remarks (CS)": remarks_cs,
+            "Pickp Address": "-",
+            "Ship To Address": ship_address,
+            "Mode of Transport": mode_of_transport,
+            "Services": "DG Declaration" if first_occurrence else "",
+            "Service Qty": 1 if first_occurrence else "",
+            "Signature": signature
+        }
+        rows.append(row)
         # Add DG Packaging row only once per delivery, with all other fields empty
         if first_occurrence:
             packaging_row = {header: "" for header in TSV_HEADERS}
@@ -275,19 +323,18 @@ def download_tsv():
             packaging_row["Service Qty"] = info.get("Total Containers", "")
             rows.append(packaging_row)
 
-        # ✅ Add Checklist Service if delivery is selected
+        # Optional: add Checklist Service
         if delivery in checklist_deliveries:
-            checklist_row = {header: "" for header in TSV_HEADERS}
+            checklist_row = {h: "" for h in TSV_HEADERS}
             checklist_row["Services"] = "Checklist Service"
             checklist_row["Service Qty"] = 1
             rows.append(checklist_row)
 
         processed_deliveries.add(delivery)
+        # Optional: blank row between deliveries
+        rows.append({h: "" for h in TSV_HEADERS})
 
-        # Optional: separate deliveries visually
-        rows.append({header: "" for header in TSV_HEADERS})
-
-    # Create TSV in memory
+    # Generate TSV
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=TSV_HEADERS, delimiter='\t', extrasaction='ignore')
     writer.writeheader()
@@ -304,6 +351,13 @@ def load_google_sheet():
     headers = [header for header in headers if header.strip()]
     headers = list(dict.fromkeys(headers))
     data = sheet.get_all_records(expected_headers=headers)
+    sheet2 = spreadsheet.worksheet("Sheet2")  # or the actual tab name
+    iata_headers = sheet2.row_values(1)
+    iata_headers = [h for h in iata_headers if h.strip()]
+    iata_headers = list(dict.fromkeys(iata_headers))
+
+    iata_data = sheet2.get_all_records(expected_headers=iata_headers)
+    iata_df = pd.DataFrame(iata_data)
     return pd.DataFrame(data)
 
 @app.route('/view_sheet', methods=['GET', 'POST'])
@@ -336,7 +390,7 @@ def view_sheet():
 
     # Render the sheet data with the form
     return render_template('view_sheet.html', headers=headers, rows=rows)
-    
+
 # Flask route for processing PDF and displaying extracted data
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -385,12 +439,4 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
-
-
-
-
-
-
-
-
 
