@@ -338,7 +338,7 @@ def download_tsv_post():
         # Optional: add Checklist Service
         if delivery in checklist_deliveries:
             checklist_row = {h: "" for h in TSV_HEADERS}
-            checklist_row["Services"] = "Checklist Service"
+            checklist_row["Services"] = "Checklist service fee "
             checklist_row["Service Qty"] = 1
             rows.append(checklist_row)
 
@@ -446,4 +446,5 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
