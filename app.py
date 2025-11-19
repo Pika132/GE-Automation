@@ -223,6 +223,14 @@ TSV_HEADERS = [
     "Services", "Service Qty", "Signature"
 ]
 
+sheet2 = spreadsheet.worksheet("Sheet2")  # or the actual tab name
+iata_headers = sheet2.row_values(1)
+iata_headers = [h for h in iata_headers if h.strip()]
+iata_headers = list(dict.fromkeys(iata_headers))
+
+iata_data = sheet2.get_all_records(expected_headers=iata_headers)
+iata_df = pd.DataFrame(iata_data)
+
 @app.route('/download_tsv', methods=['POST'])
 def download_tsv_post():
     data = request.get_json()
@@ -359,13 +367,6 @@ def load_google_sheet():
     headers = [header for header in headers if header.strip()]
     headers = list(dict.fromkeys(headers))
     data = sheet.get_all_records(expected_headers=headers)
-    sheet2 = spreadsheet.worksheet("Sheet2")  # or the actual tab name
-    iata_headers = sheet2.row_values(1)
-    iata_headers = [h for h in iata_headers if h.strip()]
-    iata_headers = list(dict.fromkeys(iata_headers))
-
-    iata_data = sheet2.get_all_records(expected_headers=iata_headers)
-    iata_df = pd.DataFrame(iata_data)
     return pd.DataFrame(data)
 
 @app.route('/view_sheet', methods=['GET', 'POST'])
@@ -447,5 +448,6 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
