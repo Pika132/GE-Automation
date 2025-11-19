@@ -214,15 +214,6 @@ C/O DHL Global Forwarding (S) Pte Ltd
 40 Alps Avenue 3rd floor
 Singapore 498781 SG"""
 
-TSV_HEADERS = [
-    "","Ship to","Job Description", "Shipper", "Consignee", "Shipper Reference Number", 
-    "Shipment Type", "UN or ID NO.", "Proper shipping name", "Packing Group",
-    "PCS/AP Qty", "Type of Packing", "Weight", "Pack", "Label Marking", 
-    "OP Qty", "Auth", "User", "Reference Number", "Remarks (CS)", 
-    "Pickp Address", "Ship To Address", "Mode of Transport", 
-    "Services", "Service Qty", "Signature"
-]
-
 sheet2 = spreadsheet.worksheet("Sheet2")  # or the actual tab name
 iata_headers = sheet2.row_values(1)
 iata_headers = [h for h in iata_headers if h.strip()]
@@ -238,6 +229,7 @@ def download_tsv_post():
         return "⚠️ No data received.", 400
 
     signature = data.get("signature", "")
+    user = data.get("user", "")
     checklist_deliveries = set(data.get("checklist", []))
     table_data = data.get("table_data", [])
 
@@ -258,9 +250,9 @@ def download_tsv_post():
         un = str(info.get("UN NUMBER", "")).strip()
 
             # Compute auth_value from IATA Packing Instructions
-        packing_instructions = str(info.get("IATA Packing Instructions", "")).upper()
+        packing_instructions = str(info.get("IATA PACKING INSTRUCTIONS", "")).upper()
         auth_value = "IB" if packing_instructions and ("II" in packing_instructions or "IB" in packing_instructions) else ""
-
+        delivery1 = "DN# "+ delivery
             # Determine Remarks (CS)
         try:
             un_int = int(un)
@@ -303,13 +295,17 @@ def download_tsv_post():
                 if iata_max_pax_qty is not None and weight < iata_max_pax_qty:
                     mode_of_transport = "PASSENGER (AIR)"
             except Exception as e:
-                logging.error(f"IATA lookup error for UN {un_int}: {e}")
+                logging.error(f"IATA lookup error for UN {un}: {e}")
         # Add main shipment row
         row = {
+            "":"#",
             "Job Description": "GE Healthcare",
             "Shipper": consignee_address,
             "Consignee": info.get("CONSIGNEE ADDRESS", ""),
-            "Shipper Reference Number": delivery,
+            "Airport Departure":" ",
+            "Airport Destination":" ",
+            "Airway Bill No.":" ",
+            "Shipper Reference Number": delivery1,
             "Shipment Type": "Non Radioactive",
             "UN or ID NO.": info.get("UN NUMBER", ""),
             "Proper shipping name": info.get("UN DESCRIPTION", ""),
@@ -317,12 +313,12 @@ def download_tsv_post():
             "PCS/AP Qty": total_boxes,
             "Type of Packing": "Fibreboard Box",
             "Weight": weight,
-            "Pack": "OP",
+            "Pack": "STD",
             "Label Marking": delivery,
             "OP Qty": "1",
             "Auth": auth_value,
-            "User": "",
-            "Reference Number": delivery,
+            "User": user,
+            "Reference Number": delivery1,
             "Remarks (CS)": remarks_cs,
             "Pickp Address": "-",
             "Ship To Address": ship_address,
@@ -335,8 +331,8 @@ def download_tsv_post():
         # Add DG Packaging row only once per delivery, with all other fields empty
         if first_occurrence:
             packaging_row = {header: "" for header in TSV_HEADERS}
-            packaging_row["Services"] = "DG Packaging"
-            packaging_row["Service Qty"] = info.get("Total Containers", "")
+            packaging_row["Services"] = "Packaging"
+            packaging_row["Service Qty"] = total_boxes
             rows.append(packaging_row)
 
         # Optional: add Checklist Service
@@ -409,6 +405,8 @@ def index():
     if request.method == 'POST':
         signature = request.form.get('signature', '').strip()
         app.config['USER_SIGNATURE'] = signature  # store globally
+        user = request.form.get('user', '').strip()
+        app.config['USER_DHL'] = user  # store globally
 
         if 'pdf_files' in request.files:
             pdf_files = request.files.getlist('pdf_files')
@@ -448,7 +446,4 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
-
-
-
 
