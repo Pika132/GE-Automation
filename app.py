@@ -237,114 +237,106 @@ def download_tsv_post():
         return "⚠️ No table data available.", 400
 
     rows = []
-
     processed_deliveries = set()
+    first_dn = True
+
     for info in table_data:
         full_dn = info.get("DN NUMBER", "").strip()
         delivery_match = re.match(r"(\d+)", full_dn)
         delivery = delivery_match.group(1) if delivery_match else full_dn
+
         total_boxes = int(info.get("TOTAL BOXES", 0) or 0)
         weight = float(info.get("TOTAL WEIGHT", 0) or 0)
-
-        first_occurrence = delivery not in processed_deliveries
         un = str(info.get("UN NUMBER", "")).strip()
-
-            # Compute auth_value from IATA Packing Instructions
         packing_instructions = str(info.get("IATA PACKING INSTRUCTIONS", "")).upper()
         auth_value = "IB" if packing_instructions and ("II" in packing_instructions or "IB" in packing_instructions) else ""
-        delivery1 = "DN# "+ delivery
-            # Determine Remarks (CS)
+        delivery1 = "DN# " + delivery
+
+        # Determine Mode of Transport
+        mode_of_transport = "Cargo (Air)"
         try:
             un_int = int(un)
         except:
             un_int = None
 
-        if un_int == 3480 and auth_value == "IB":
-            remarks_cs = "Max net 10kg. CAO, Battery Label, Handling Label"
-        elif un_int == 3480 and auth_value == "":
-            remarks_cs = "Max net 35kg. CAO & Battery Label"
-        elif un_int == 3090 and auth_value == "":
-            remarks_cs = "Max net 35kg. CAO & Battery Label"
-        elif un_int == 3090 and auth_value == "IB":
-            remarks_cs = "Max net 2.5kg. CAO, Battery Label, Handling Label"
-        elif un_int == 1950 and auth_value == "IB":
-            remarks_cs = "Max net 75kg"
-        elif un_int == 1950 and auth_value == "":
-            remarks_cs = "Max net 75kg"
-        elif un_int == 3164 and auth_value == "":
-            remarks_cs = "Max net no limit. Class 2.2 Label"
-        elif un_int == 3164 and auth_value == "IB":
-            remarks_cs = "Max net no limit. Class 2.2 Label"
-        else:
-            remarks_cs = ""
-
-            # Determine Mode of Transport
-        mode_of_transport = "Cargo (Air)"
-
-        if un_int in [3090, 3480, 3164]:
-                # Always cargo
-            pass
-        else:
-                # Evaluate PAX based on IATA table
-            iata_max_pax_qty = None
+        if un_int not in [3090, 3480, 3164]:
             try:
                 filtered_iata = iata_df.loc[iata_df['UN_Number'] == un_int, 'Maximum quantity for PAX']
-                if not filtered_iata.empty:
-                    iata_max_pax_qty = float(filtered_iata.iloc[0])
-                # Compare with weight
-                if iata_max_pax_qty is not None and weight < iata_max_pax_qty:
+                if not filtered_iata.empty and weight < float(filtered_iata.iloc[0]):
                     mode_of_transport = "PASSENGER (AIR)"
             except Exception as e:
                 logging.error(f"IATA lookup error for UN {un}: {e}")
-        # Add main shipment row
-        row = {
-            "":"#",
-            "Job Description": "GE Healthcare",
-            "Shipper": consignee_address,
-            "Consignee": info.get("CONSIGNEE ADDRESS", ""),
-            "Airport Departure":" ",
-            "Airport Destination":" ",
-            "Airway Bill No.":" ",
-            "Shipper Reference Number": delivery1,
-            "Shipment Type": "Non Radioactive",
-            "UN or ID NO.": info.get("UN NUMBER", ""),
-            "Proper shipping name": info.get("UN DESCRIPTION", ""),
-            "Packing Group": info.get("PACKING GROUP", ""),
-            "PCS/AP Qty": total_boxes,
-            "Type of Packing": "Fibreboard Box",
-            "Weight": weight,
-            "Pack": "STD",
-            "Label Marking": delivery,
-            "OP Qty": "1",
-            "Auth": auth_value,
-            "User": user,
-            "Reference Number": delivery1,
-            "Remarks (CS)": remarks_cs,
-            "Pickp Address": "-",
-            "Ship To Address": ship_address,
-            "Mode of Transport": mode_of_transport,
-            "Services": "DG Declaration" if first_occurrence else "",
-            "Service Qty": 1 if first_occurrence else "",
-            "Signature": signature
-        }
-        rows.append(row)
-        # Add DG Packaging row only once per delivery, with all other fields empty
-        if first_occurrence:
+        if delivery not in processed_deliveries:
+            # Add empty row for new DN (except for first DN)
+            if not first_dn:
+                empty_row = {header: "" for header in TSV_HEADERS}
+                rows.append(empty_row)
+            first_dn = False
+            # Full row for first occurrence
+            row = {
+                "": "#",
+                "Job Description": "GE Healthcare",
+                "Shipper": consignee_address,
+                "Consignee": info.get("CONSIGNEE ADDRESS", ""),
+                "Airport Departure": "SINGAPORE",
+                "Airport Destination": " ",
+                "Airway Bill No.": " ",
+                "Shipper Reference Number": delivery1,
+                "Shipment Type": "Non Radioactive",
+                "UN or ID NO.": un,
+                "Proper shipping name": info.get("UN DESCRIPTION", ""),
+                "Packing Group": info.get("PACKING GROUP", ""),
+                "PCS/AP Qty": total_boxes,
+                "Type of Packing": "Fibreboard Box",
+                "Weight": weight,
+                "Pack": "STD",
+                "Label Marking": delivery,
+                "OP Qty": "1",
+                "Auth": auth_value,
+                "User": user,
+                "Reference Number": delivery1,
+                "Remarks (CS)": "",  # optional
+                "Pickp Address": "-",
+                "Ship To Address": ship_address,
+                "Mode of Transport": mode_of_transport,
+                "Services": "DG Declaration",
+                "Service Qty": 1,
+                "Signature": signature
+            }
+            rows.append(row)
+
+            # DG Packaging row
             packaging_row = {header: "" for header in TSV_HEADERS}
             packaging_row["Services"] = "Packaging"
             packaging_row["Service Qty"] = total_boxes
-            rows.append(packaging_row)
+            rows.append(packaging_row)  
+            
 
-        # Optional: add Checklist Service
-        if delivery in checklist_deliveries:
-            checklist_row = {h: "" for h in TSV_HEADERS}
-            checklist_row["Services"] = "Checklist service fee "
-            checklist_row["Service Qty"] = 1
-            rows.append(checklist_row)
-
-        processed_deliveries.add(delivery)
-        # Optional: blank row between deliveries
-        rows.append({h: "" for h in TSV_HEADERS})
+            processed_deliveries.add(delivery)
+            
+            # Optional: add Checklist Service
+            if delivery in checklist_deliveries:
+                checklist_row = {h: "" for h in TSV_HEADERS}
+                checklist_row["Services"] = "Checklist service fee "
+                checklist_row["Service Qty"] = 1
+                rows.append(checklist_row)
+            print(checklist_deliveries)
+        else:
+            # Duplicate DN → simplified row
+            simplified_row = {header: "" for header in TSV_HEADERS}
+            simplified_row.update({
+                "UN or ID NO.": un,
+                "Proper shipping name": info.get("UN DESCRIPTION", ""),
+                "Packing Group": info.get("PACKING GROUP", ""),
+                "PCS/AP Qty": total_boxes,
+                "Type of Packing": "Fibreboard Box",
+                "Weight": weight,
+                "Pack": "STD",
+                "Label Marking": delivery,
+                "OP Qty": "1",
+                "Auth": auth_value
+            })
+            rows.append(simplified_row)
 
     # Generate TSV
     output = io.StringIO()
@@ -446,5 +438,4 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
-
 
