@@ -308,7 +308,7 @@ def download_tsv_post():
             # DG Packaging row
             packaging_row = {header: "" for header in TSV_HEADERS}
             packaging_row["Services"] = "Packaging"
-            packaging_row["Service Qty"] = total_boxes
+            packaging_row["Service Qty"] = info.get("TOTAL NUMBER OF CONTAINERS", "")
             rows.append(packaging_row)  
             
 
@@ -438,4 +438,5 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
