@@ -173,7 +173,6 @@
     </div>
 
     {% if all_extracted_info %}
-        <button onclick="downloadXLSX()">💾 Download XLSX</button>
 
         <table id="data-table">
             <thead>
@@ -201,7 +200,20 @@
 
                     {% if not boxes %}
                         <tr>
-                            <td contenteditable="true">{{ info['Filename'].split('.pdf')[0] }}</td>
+                            <td rowspan="1">
+                                <div>
+                                    <!-- Delivery note filename wrapped in span -->
+                                    <span contenteditable="true">{{ info['Filename'].split('.pdf')[0] }}</span>
+
+                                    <!-- Buttons -->
+                                    <button type="button" onclick="toggleChecklist('{{ info['Delivery']|default(info['Filename'].split('.pdf')[0]) }}', this)">
+                                        Mark Checklist
+                                    </button>
+                                    <button type="button" onclick="toggleRecalculate('{{ info['Filename'].split('.pdf')[0] }}', this)">
+                                        Mark for Rec
+                                    </button>
+                                </div>
+                            </td>
                             <td class="pre-line" contenteditable="true">{{ info.get('Ship To','') }}</td>
                             <td contenteditable="true"></td>
                             <td contenteditable="true"></td>
@@ -231,15 +243,13 @@
                                     <!-- Merge common info for this delivery -->
                                     <td rowspan="{{ boxes|length }}">
                                         <div>
-                                            <!-- Delivery note filename -->
+                                            <!-- Delivery note filename wrapped in span -->
                                             <span contenteditable="true">{{ info['Filename'].split('.pdf')[0] }}</span>
 
-                                            <!-- Mark Checklist Button -->
+                                            <!-- Buttons -->
                                             <button type="button" onclick="toggleChecklist('{{ info['Delivery']|default(info['Filename'].split('.pdf')[0]) }}', this)">
                                                 Mark Checklist
                                             </button>
-
-                                            <!-- Mark for Recalculation Button -->
                                             <button type="button" onclick="toggleRecalculate('{{ info['Filename'].split('.pdf')[0] }}', this)">
                                                 Mark for Rec
                                             </button>
@@ -257,8 +267,8 @@
 
                                 <!-- Show merged boxes -->
                                 <td contenteditable="true">{{ b['Total Boxes'] }}</td>  <!-- Total boxes -->
-                                <td contenteditable="true">{{ b['Units'] }}</td>   <!-- Total Units -->
-                                <td contenteditable="true">{{ b['Weight'] }}</td>  <!-- Total Weight -->
+                                <td contenteditable="true">{{ b['Units'] }}</td>       <!-- Total Units -->
+                                <td contenteditable="true">{{ b['Weight'] }}</td>      <!-- Total Weight -->
 
                                 <!-- UN info (same for all boxes) -->
                                 {% if loop.first %}
@@ -272,45 +282,13 @@
                         {% endfor %}
                     {% endif %}
                 {% endfor %}
-
             </tbody>
+
 
 
         </table>
 
         <script>
-        /* ===========================
-        1. DOWNLOAD XLSX
-        =========================== */
-        function downloadXLSX() {
-            var data = [];
-            var table = document.getElementById("data-table");
-            var headers = [];
-
-            table.querySelectorAll("thead th").forEach(th => headers.push(th.innerText));
-
-            table.querySelectorAll("tbody tr").forEach(tr => {
-                var row = {};
-                tr.querySelectorAll("td").forEach((td, i) => {
-                    row[headers[i]] = td.innerText;
-                });
-                data.push(row);
-            });
-
-            var ws = XLSX.utils.json_to_sheet(data, { cellDates: true });
-
-            Object.keys(ws).forEach(function(key) {
-                if (ws[key].v && typeof ws[key].v === "string") {
-                    ws[key].v = ws[key].v.replace(/\r?\n/g, "\r\n");
-                }
-            });
-
-            var wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-            XLSX.writeFile(wb, "extracted_data.xlsx");
-        }
-
-
         /* ===========================
         2. ADDRESS VALIDATION
         =========================== */
@@ -363,63 +341,79 @@
             }
         }
 
-
         /* ===========================
         4. DOWNLOAD TSV
         =========================== */
         function downloadTSV() {
             const signature = document.getElementById('signature').value.trim();
-            if (!signature) {
-                alert("⚠️ Please enter your signature before exporting TSV.");
+            const user = document.getElementById('user').value.trim();
+            if (!signature || !user) {
+                alert("⚠️ Enter user & signature first.");
                 return;
             }
 
-            const user = document.getElementById('user').value.trim();
-            if (!user) {
-                alert("⚠️ Please enter your user before exporting TSV.");
-                return;
-            }
             const table = document.getElementById("data-table");
             const headers = Array.from(table.querySelectorAll("thead th")).map(th => th.innerText.trim());
             const tableData = [];
 
+            const activeRowspans = {}; // Tracks active rowspan per column
+
             table.querySelectorAll("tbody tr").forEach(tr => {
                 const rowData = {};
-                tr.querySelectorAll("td").forEach((td, i) => {
-                    rowData[headers[i]] = td.innerText.trim();
+                const tds = Array.from(tr.querySelectorAll("td"));
+                let tdIndex = 0;
+
+                headers.forEach((header, colIndex) => {
+                    // Use value from previous rowspan if active
+                    if (activeRowspans[colIndex] && activeRowspans[colIndex].remaining > 0) {
+                        rowData[header] = activeRowspans[colIndex].value;
+                        activeRowspans[colIndex].remaining--;
+                    } 
+                    // Otherwise use current TD
+                    else if (tdIndex < tds.length) {
+                        const td = tds[tdIndex];
+                        const value = td.innerText.trim();
+                        rowData[header] = value;
+
+                        const rs = parseInt(td.getAttribute("rowspan")) || 1;
+                        if (rs > 1) {
+                            activeRowspans[colIndex] = { value, remaining: rs - 1 };
+                        }
+
+                        tdIndex++;
+                    } 
+                    // No TD and no active rowspan
+                    else {
+                        rowData[header] = '';
+                    }
                 });
+
                 tableData.push(rowData);
             });
 
+            // Send to server for TSV generation
             fetch("/download_tsv", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     signature: signature,
                     user: user,
-                    checklist: [...checklistDeliveries],
-                    table_data: tableData
+                    table_data: tableData,
+                    checklist: Array.from(checklistDeliveries)  
                 })
             })
-                .then(res => {
-                    if (!res.ok) throw new Error("Failed to download TSV");
-                    return res.blob();
-                })
-                .then(blob => {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = "shipment_data.tsv";
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                })
-                .catch(err => {
-                    console.error(err);
-                    alert("⚠️ Error downloading TSV. See console for details.");
-                });
+            .then(res => res.blob())
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "shipment_data.tsv";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            })
+            .catch(err => console.error(err));
         }
-
 
         /* ===========================
         5. MARK FOR RECALCULATION
@@ -455,6 +449,7 @@
         ======================================================= */
 
         /* STEP 1 — Parse 3-line delivery input */
+
         function processRecalculateInput() {
             const input = document.getElementById("recalc-input").value.trim();
             if (!input) {
@@ -469,126 +464,175 @@
                 return;
             }
 
+            // Parse entries from input
             const entries = [];
             for (let i = 0; i < lines.length; i += 3) {
+                const unitWeight = parseFloat(lines[i + 2].replace("kg", "").trim());
+                if (isNaN(unitWeight)) {
+                    alert(`⚠️ Invalid unit weight on line ${i + 3}`);
+                    return;
+                }
                 entries.push({
                     delivery: lines[i],
                     itemCode: lines[i + 1],
-                    unitWeight: parseFloat(lines[i + 2].replace("kg", "").trim())
+                    unitWeight: unitWeight
                 });
             }
 
+            // Update table rows
             updateRowsWithEntries(entries);
+
+            // Sort table
             sortTableByInputOrder(entries);
 
             alert("✅ Updated and sorted in exact pasted order!");
         }
 
 
-        /* STEP 2 — Update matching table rows */
+        /* ===========================
+        UPDATE TABLE ROWS WITH INPUT
+        =========================== */
         function updateRowsWithEntries(entries) {
-            const rows = document.querySelectorAll("#data-table tbody tr");
-
-            rows.forEach(row => {
-                const firstTd = row.querySelector("td:nth-child(1)");
-
-                if (!firstTd) return;
-
-                // Robustly get DN
-                let dn = null;
-                const dnSpan = firstTd.querySelector("span");
-                if (dnSpan && dnSpan.innerText.trim() !== "") {
-                    dn = dnSpan.innerText.trim();
-                } else {
-                    dn = Array.from(firstTd.childNodes)
-                        .filter(node => node.nodeType === Node.TEXT_NODE)
-                        .map(node => node.textContent.trim())
-                        .join("")
-                        .trim();
-                }
-
-                if (!dn) return;
-
-                // Find the entry matching this DN
-                const entry = entries.find(e => e.delivery === dn);
-                if (!entry) return;
-
-                // Update table cells
-                const itemCodeCell = row.querySelector("td:nth-child(3)");
-                if (itemCodeCell) itemCodeCell.innerText = entry.itemCode;
-
-                const unitWeightCell = row.querySelector("td:nth-child(5)");
-                if (unitWeightCell) unitWeightCell.innerText = entry.unitWeight;
-
-                const unitsCell = row.querySelector("td:nth-child(8)");
-                const units = unitsCell ? parseFloat(unitsCell.innerText) || 0 : 0;
-
-                const totalWeightCell = row.querySelector("td:nth-child(9)");
-                if (totalWeightCell) totalWeightCell.innerText = (entry.unitWeight * units).toFixed(2);
-            });
-        }
-
-
-        /* STEP 3 — Sort entire table in same order as input (supports rowspan) */
-        function sortTableByInputOrder(entries) {
             const tableBody = document.querySelector("#data-table tbody");
             const allRows = Array.from(tableBody.querySelectorAll("tr"));
 
+            // Group rows by DN (first row contains rowspan)
             const dnGroups = {};
             let currentDN = null;
 
             allRows.forEach(row => {
                 const firstTd = row.querySelector("td:nth-child(1)");
-
                 if (!firstTd) return;
 
                 let dnText = null;
-
-                // 1. Try to get <span> inside the TD
                 const dnSpan = firstTd.querySelector("span");
-                if (dnSpan && dnSpan.innerText.trim() !== "") {
-                    dnText = dnSpan.innerText.trim();
-                } else {
-                    // 2. Fallback: get only text nodes (exclude buttons)
-                    dnText = Array.from(firstTd.childNodes)
-                        .filter(node => node.nodeType === Node.TEXT_NODE)
-                        .map(node => node.textContent.trim())
-                        .join("")
-                        .trim();
-                }
+                dnText = dnSpan ? dnSpan.innerText.trim() : firstTd.innerText.trim();
 
-                if (dnText !== "") {
-                    currentDN = dnText;
-                }
-
+                if (dnText !== "") currentDN = dnText;
                 if (!dnGroups[currentDN]) dnGroups[currentDN] = [];
                 dnGroups[currentDN].push(row);
             });
 
-            const newOrder = [];
-            const usedDN = new Set();
-
+            // Update each DN group based on input
             entries.forEach(entry => {
-                const dn = entry.delivery;
-                if (dnGroups[dn]) {
-                    newOrder.push(...dnGroups[dn]);
-                    usedDN.add(dn);
-                }
-            });
+                const group = dnGroups[entry.delivery];
+                if (!group) return;
 
-            // Append remaining rows not in entries
-            Object.keys(dnGroups).forEach(dn => {
-                if (!usedDN.has(dn)) {
-                    newOrder.push(...dnGroups[dn]);
-                }
-            });
+                // Update first row: item code
+                const firstRow = group[0];
+                const itemCodeCell = firstRow.querySelector("td:nth-child(3)");
+                if (itemCodeCell) itemCodeCell.innerText = entry.itemCode;
 
-            tableBody.innerHTML = "";
-            newOrder.forEach(row => tableBody.appendChild(row));
+                // Update per-box rows: recalc Total Weight
+                group.forEach(row => {
+                    const unitsCell = row.querySelector("td:nth-child(8)"); // Total Units
+                    const weightCell = row.querySelector("td:nth-child(9)"); // Total Weight
+                    const units = unitsCell ? parseFloat(unitsCell.innerText) || 0 : 0;
+                    if (weightCell) weightCell.innerText = (entry.unitWeight * units).toFixed(2);
+                });
+            });
         }
 
 
-        </script>
+        /* ===========================
+        SORT TABLE BASED ON INPUT
+        =========================== */
+        function processRecalculateInput() {
+            const input = document.getElementById("recalc-input").value.trim();
+            if (!input) {
+                alert("⚠️ Paste your input first!");
+                return;
+            }
+
+            const lines = input.split(/\r?\n/).map(l => l.trim()).filter(l => l !== "");
+            if (lines.length % 3 !== 0) {
+                alert("⚠️ Each delivery requires 3 lines: DN, Item Code, Unit Weight.");
+                return;
+            }
+
+            const entries = [];
+            for (let i = 0; i < lines.length; i += 3) {
+                const dn = lines[i];
+                const itemCode = lines[i + 1];
+                const unitWeight = parseFloat(lines[i + 2].replace("kg", "").trim());
+                if (isNaN(unitWeight)) {
+                    alert(`⚠️ Invalid unit weight on line ${i+3}`);
+                    return;
+                }
+                entries.push({delivery: dn, itemCode, unitWeight});
+            }
+
+            const tbody = document.querySelector("#data-table tbody");
+            const allRows = Array.from(tbody.querySelectorAll("tr"));
+
+            const dnGroups = {};
+            let currentDN = null;
+
+            allRows.forEach(row => {
+                const dnCell = row.querySelector("td:nth-child(1) span");
+                if (dnCell && dnCell.innerText.trim() !== "") {
+                    currentDN = dnCell.innerText.trim();
+                }
+                if (!currentDN) return;
+                if (!dnGroups[currentDN]) dnGroups[currentDN] = [];
+                dnGroups[currentDN].push(row);
+            });
+
+            // Update all rows in each DN group
+            entries.forEach(entry => {
+                const group = dnGroups[entry.delivery];
+                if (!group) return;
+
+                group.forEach((row, idx) => {
+                    const cells = Array.from(row.querySelectorAll("td"));
+
+                    if (idx === 0) {
+                        // First row: update Item Code & Total Item Weight
+                        if (cells[2]) cells[2].innerText = entry.itemCode;       // Item Code
+                        if (cells[4]) cells[4].innerText = entry.unitWeight.toFixed(2); // Total Item Weight
+
+                        // Total Units: 8th cell
+                        const unitsCell = cells[7];
+                        const weightCell = cells[8];
+                        const units = unitsCell ? parseFloat(unitsCell.innerText) || 0 : 0;
+                        if (weightCell) weightCell.innerText = (units * entry.unitWeight).toFixed(2);
+
+                    } else {
+                        // Child row: last two cells are Units & Weight
+                        const unitsCell = cells[cells.length - 2];
+                        const weightCell = cells[cells.length - 1];
+                        const units = unitsCell ? parseFloat(unitsCell.innerText) || 0 : 0;
+                        if (weightCell) weightCell.innerText = (units * entry.unitWeight).toFixed(2);
+                    }
+                });
+            });
+
+            // Sort table according to input order
+            const newOrder = [];
+            const usedDNs = new Set();
+
+            entries.forEach(entry => {
+                const group = dnGroups[entry.delivery];
+                if (group) {
+                    newOrder.push(...group);
+                    usedDNs.add(entry.delivery);
+                }
+            });
+
+            Object.keys(dnGroups).forEach(dn => {
+                if (!usedDNs.has(dn)) {
+                    newOrder.push(...dnGroups[dn]);
+                }
+            });
+
+            tbody.innerHTML = "";
+            newOrder.forEach(row => tbody.appendChild(row));
+
+            alert("✅ Updated and recalculated correctly!");
+        }
+
+
+    </script>
 
     {% endif %}
 </body>
