@@ -258,6 +258,28 @@ def download_tsv_post():
             un_int = int(un)
         except:
             un_int = None
+            
+        if un_int == 3480 and auth_value == "IB":
+            remarks_cs = "Max net 10kg. CAO, Battery Label, Handling Label"
+        elif un_int == 3480 and auth_value == "":
+            remarks_cs = "Max net 35kg. CAO & Battery Label"
+        elif un_int == 3090 and auth_value == "":
+            remarks_cs = "Max net 35kg. CAO & Battery Label"
+        elif un_int == 3090 and auth_value == "IB":
+            remarks_cs = "Max net 2.5kg. CAO, Battery Label, Handling Label"
+        elif un_int == 1950 and auth_value == "IB":
+            remarks_cs = "Max net 75kg"
+        elif un_int == 1950 and auth_value == "":
+            remarks_cs = "Max net 75kg"
+        elif un_int == 3164 and auth_value == "":
+            remarks_cs = "Max net no limit. Class 2.2 Label"
+        elif un_int == 3164 and auth_value == "IB":
+            remarks_cs = "Max net no limit. Class 2.2 Label"
+        else:
+            remarks_cs = ""
+
+            # Determine Mode of Transport
+        mode_of_transport = "Cargo (Air)"
 
         if un_int not in [3090, 3480, 3164]:
             try:
@@ -438,5 +460,6 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
