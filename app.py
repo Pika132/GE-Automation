@@ -317,7 +317,7 @@ def download_tsv_post():
                 "Auth": auth_value,
                 "User": user,
                 "Reference Number": delivery1,
-                "Remarks (CS)": "",  # optional
+                "Remarks (CS)": remarks_cs,
                 "Pickp Address": "-",
                 "Ship To Address": ship_address,
                 "Mode of Transport": mode_of_transport,
@@ -460,6 +460,7 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
 
