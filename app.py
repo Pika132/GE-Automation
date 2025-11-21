@@ -278,16 +278,27 @@ def download_tsv_post():
         else:
             remarks_cs = ""
 
-            # Determine Mode of Transport
+        # Look up maximum quantity for PAX and compare with weight
+        iata_max_pax_qty = None
+
+        try:
+            # Adjust the column name to match your actual column name in iata_df
+            filtered_iata = iata_df.loc[iata_df['UN_Number'] == int(un), 'Maximum quantity for PAX']
+            if not filtered_iata.empty:
+                iata_max_pax_qty = float(filtered_iata.iloc[0])
+            else:
+                logging.warning(f"No IATA data found for UN (number) {un}")
+
+        except IndexError:
+            logging.warning(f"IndexError: No IATA data found for UN (number) {un}")
+
+        # Determine Mode of Transport based on comparison
         mode_of_transport = "Cargo (Air)"
 
-        if un_int not in [3090, 3480, 3164]:
-            try:
-                filtered_iata = iata_df.loc[iata_df['UN_Number'] == un_int, 'Maximum quantity for PAX']
-                if not filtered_iata.empty and weight < float(filtered_iata.iloc[0]):
-                    mode_of_transport = "PASSENGER (AIR)"
-            except Exception as e:
-                logging.error(f"IATA lookup error for UN {un}: {e}")
+        if iata_max_pax_qty is not None and weight < iata_max_pax_qty:
+            print(weight)
+            mode_of_transport = "PASSENGER (AIR)"
+                
         if delivery not in processed_deliveries:
             # Add empty row for new DN (except for first DN)
             if not first_dn:
@@ -460,6 +471,7 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
 
