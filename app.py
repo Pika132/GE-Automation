@@ -278,19 +278,25 @@ def download_tsv_post():
         else:
             remarks_cs = ""
 
-        # Look up maximum quantity for PAX and compare with weight
+        # Look up maximum quantity for PAX safely
         iata_max_pax_qty = None
-
+        
         try:
-            # Adjust the column name to match your actual column name in iata_df
-            filtered_iata = iata_df.loc[iata_df['UN_Number'] == int(un), 'Maximum quantity for PAX']
-            if not filtered_iata.empty:
-                iata_max_pax_qty = float(filtered_iata.iloc[0])
+            # Ensure UN is numeric before converting
+            un_clean = str(un).strip()
+        
+            if un_clean.isdigit() and 'UN_Number' in iata_df.columns and 'Maximum quantity for PAX' in iata_df.columns:
+                un_int = int(un_clean)
+                filtered_iata = iata_df.loc[iata_df['UN_Number'] == un_int, 'Maximum quantity for PAX']
+        
+                if not filtered_iata.empty:
+                    iata_max_pax_qty = float(filtered_iata.iloc[0])
             else:
-                logging.warning(f"No IATA data found for UN (number) {un}")
+                logging.warning(f"Invalid or missing UN value: '{un}'")
+        
+        except Exception as e:
+            logging.error(f"IATA lookup failed for UN='{un}': {e}")
 
-        except IndexError:
-            logging.warning(f"IndexError: No IATA data found for UN (number) {un}")
 
         # Determine Mode of Transport based on comparison
         mode_of_transport = "Cargo (Air)"
@@ -471,6 +477,7 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
 
