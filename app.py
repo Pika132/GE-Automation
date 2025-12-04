@@ -90,101 +90,68 @@ def merge_boxes(boxes):
 # Extract the information from the text
 def extract_info(text):
     info = {}
-    info['Detected Format'] = None  # Will store which format was used
 
-    # --- Attempt Format 1 (Delivery:) ---
+    # --- Delivery number ---
     delivery_match = re.search(r'Delivery\s*:\s*(\d+)', text)
     if delivery_match:
-        info['Detected Format'] = "Format 1 (Delivery:)"
         info['Delivery'] = delivery_match.group(1)
 
-        # Ship To
-        ship_to_match = re.search(r'Ship To:\s*(.*?)(?=\s*Ship From:)', text, re.DOTALL)
-        if ship_to_match:
-            ship_to = ship_to_match.group(1)
-            ship_to_lines = [line.rstrip() for line in ship_to.splitlines() if line.strip()]
-            if ship_to_lines:
-                last_line = ship_to_lines[-1]
-                last_line = re.sub(r'\b[A-Z]{2}\b', replace_country, last_line)
-                ship_to_lines[-1] = last_line
-            info['Ship To'] = "\n".join(ship_to_lines)
-        else:
-            info['Ship To'] = None
+    # --- Ship To address ---
+    ship_to_match = re.search(r'Ship To:\s*(.*?)(?=\s*Ship From:)', text, re.DOTALL)
+    if ship_to_match:
+        ship_to = ship_to_match.group(1)
+        ship_to_lines = [line.rstrip() for line in ship_to.splitlines() if line.strip()]
+        last_line = ship_to_lines[-1]
+        pattern = re.compile(r'\b[A-Z]{2}\b', re.IGNORECASE)
+        last_line = pattern.sub(replace_country, last_line)
+        ship_to_lines[-1] = last_line
+        info['Ship To'] = "\n".join(ship_to_lines)
 
-        # Totals
-        containers_match = re.search(r'Total number of containers\s*:\s*(\d+)', text)
-        info['Total Containers'] = int(containers_match.group(1)) if containers_match else 0
+    # --- Totals ---
+    containers_match = re.search(r'Total number of containers\s*:\s*(\d+)', text)
+    total_containers = int(containers_match.group(1)) if containers_match else 0
+    info['Total Containers'] = total_containers
 
-        qty_match = re.search(r'Total Qty/LPN:\s*([\d.]+)', text)
-        info['Total Qty/LPN'] = float(qty_match.group(1)) if qty_match else 0
+    qty_match = re.search(r'Total Qty/LPN:\s*([\d.]+)', text)
+    total_items = float(qty_match.group(1)) if qty_match else 0
+    info['Total Qty/LPN'] = total_items
 
-        weight_match = re.search(r'Net Weight\(kg\):\s*([\d.]+)', text)
-        info['Net Weight (kg)'] = float(weight_match.group(1)) if weight_match else 0
+    weight_match = re.search(r'Net Weight\(kg\):\s*([\d.]+)', text)
+    total_weight = float(weight_match.group(1)) if weight_match else 0
+    info['Net Weight (kg)'] = total_weight
 
-        # Item Numbers
-        clean_text = re.sub(r'[^\x00-\x7F]+', '', text)
-        item_numbers = re.findall(r'^\s*as([^\s]*)', clean_text, re.MULTILINE | re.IGNORECASE)
-        info['Item Numbers'] = item_numbers
+    # --- Item numbers ---
+    clean_text = re.sub(r'[^\x00-\x7F]+', '', text)
+    item_numbers = re.findall(r'^\s*as([^\s]*)', clean_text, re.MULTILINE | re.IGNORECASE)
+    info['Item Numbers'] = item_numbers
 
-    else:
-        # --- Format 2 fallback ---
-        info['Detected Format'] = "Format 2 (INVOICE NO)"
-        invoice = re.search(r"INVOICE NO\s+(\S+)", text)
-        info['Delivery'] = invoice.group(1) if invoice else None
-
-        consignee_match = re.search(
-            r"CONSIGNEE\s+(.*?\n[A-Z]{2}\s*$)",
-            text,
-            re.DOTALL | re.MULTILINE
-        )
-        if consignee_match:
-            consignee_lines = [line.rstrip() for line in consignee_match.group(1).splitlines() if line.strip()]
-            if consignee_lines:
-                last_line = consignee_lines[-1]
-                last_line = re.sub(r'\b[A-Z]{2}\b', replace_country, last_line)
-                consignee_lines[-1] = last_line
-            info["Ship To"] = "\n".join(consignee_lines)
-        else:
-            info["Ship To"] = None
-
-        qty = re.search(r"\b(\d+)\s*EA\b", text)
-        info['Total Qty/LPN'] = int(qty.group(1)) if qty else 0
-
-        pkg_pattern = r"\b(\d+)\s+([\dxX]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)"
-        pkg_match = re.search(pkg_pattern, text)
-        if pkg_match:
-            info['Total Containers'] = int(pkg_match.group(1))
-            info['Net Weight (kg)'] = float(pkg_match.group(6))
-        else:
-            info['Total Containers'] = 0
-            info['Net Weight (kg)'] = 0
-
-        # No reliable item numbers in this format
-        info['Item Numbers'] = []
-
-    # --- Split into boxes ---
+    # --- Split items into boxes ---
     def split_into_boxes(total_items, total_weight, total_containers):
         boxes = []
         if total_containers == 0:
             return boxes
+
         base_units = int(total_items // total_containers)
         remainder = int(total_items % total_containers)
+
         for i in range(total_containers):
             units = base_units + (1 if i < remainder else 0)
             weight = round(total_weight * (units / total_items), 2) if total_items > 0 else 0
-            boxes.append({'Box': i + 1, 'Units': units, 'Weight': weight})
+            boxes.append({
+                'Box': i + 1,
+                'Units': units,
+                'Weight': weight
+            })
         return boxes
 
-    total_items = info.get('Total Qty/LPN', 0)
-    total_weight = info.get('Net Weight (kg)', 0)
-    total_containers = info.get('Total Containers', 0)
+    # ✅ Split then merge boxes
+    info['Boxes'] = split_into_boxes(total_items, total_weight, total_containers)
+    info['Boxes'] = merge_boxes(info['Boxes'])
 
-    boxes = split_into_boxes(total_items, total_weight, total_containers)
-    boxes = merge_boxes(boxes)
-    info['Boxes'] = boxes
-    info['Total Boxes'] = len(boxes)
-    info['Total Units'] = sum(b['Units'] for b in boxes)
-    info['Total Weight'] = sum(b['Weight'] for b in boxes)
+    # --- Aggregate totals ---
+    info['Total Boxes'] = len(info['Boxes'])
+    info['Total Units'] = sum(b['Units'] for b in info['Boxes'])
+    info['Total Weight'] = sum(b['Weight'] for b in info['Boxes'])
 
     # --- Lookup UN info ---
     info['UN Number'] = []
@@ -193,7 +160,7 @@ def extract_info(text):
     info['IATA Packing Instructions'] = []
     info['UN Description'] = []
 
-    un_info_list = [un_lookup.get(item, {}) for item in info['Item Numbers']]
+    un_info_list = [un_lookup.get(item, {}) for item in item_numbers]
     for u in un_info_list:
         info['UN Number'].append(u.get('UN Number', ''))
         info['IATA UN Hazard Class'].append(u.get('IATA UN Hazard Class', ''))
@@ -510,9 +477,6 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
-
-
-
 
 
 
