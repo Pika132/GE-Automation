@@ -161,33 +161,30 @@ def extract_info(text):
 
         # No reliable item numbers in this format
         info['Item Numbers'] = []
-    # --- Split items into boxes ---
+
+    # --- Split into boxes ---
     def split_into_boxes(total_items, total_weight, total_containers):
         boxes = []
         if total_containers == 0:
             return boxes
-
         base_units = int(total_items // total_containers)
         remainder = int(total_items % total_containers)
-
         for i in range(total_containers):
             units = base_units + (1 if i < remainder else 0)
             weight = round(total_weight * (units / total_items), 2) if total_items > 0 else 0
-            boxes.append({
-                'Box': i + 1,
-                'Units': units,
-                'Weight': weight
-            })
+            boxes.append({'Box': i + 1, 'Units': units, 'Weight': weight})
         return boxes
 
-    # ✅ Split then merge boxes
-    info['Boxes'] = split_into_boxes(total_items, total_weight, total_containers)
-    info['Boxes'] = merge_boxes(info['Boxes'])
+    total_items = info.get('Total Qty/LPN', 0)
+    total_weight = info.get('Net Weight (kg)', 0)
+    total_containers = info.get('Total Containers', 0)
 
-    # --- Aggregate totals ---
-    info['Total Boxes'] = len(info['Boxes'])
-    info['Total Units'] = sum(b['Units'] for b in info['Boxes'])
-    info['Total Weight'] = sum(b['Weight'] for b in info['Boxes'])
+    boxes = split_into_boxes(total_items, total_weight, total_containers)
+    boxes = merge_boxes(boxes)
+    info['Boxes'] = boxes
+    info['Total Boxes'] = len(boxes)
+    info['Total Units'] = sum(b['Units'] for b in boxes)
+    info['Total Weight'] = sum(b['Weight'] for b in boxes)
 
     # --- Lookup UN info ---
     info['UN Number'] = []
@@ -196,7 +193,7 @@ def extract_info(text):
     info['IATA Packing Instructions'] = []
     info['UN Description'] = []
 
-    un_info_list = [un_lookup.get(item, {}) for item in item_numbers]
+    un_info_list = [un_lookup.get(item, {}) for item in info['Item Numbers']]
     for u in un_info_list:
         info['UN Number'].append(u.get('UN Number', ''))
         info['IATA UN Hazard Class'].append(u.get('IATA UN Hazard Class', ''))
@@ -513,6 +510,7 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
 
