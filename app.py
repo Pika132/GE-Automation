@@ -192,10 +192,16 @@ def extract_info(text):
             info["Ship To"] = None
 
         # Total items
-        qty = re.search(r"\b(\d+)\s*(EA|DMQ)\b", text, re.IGNORECASE)
-        if not qty:
-            qty = re.search(r"\b(\d+)\s*[xX]\b", text)
-        total_items = float(qty.group(1)) if qty else 0
+        total_items = 0
+
+        # Match quantities with EA or DMQ
+        matches = re.findall(r"\b(\d+)\s*(EA|DMQ)\b", text, re.IGNORECASE)
+        total_items += sum(float(qty) for qty, _ in matches)
+
+        # Match quantities like 3x or 3X
+        matches_x = re.findall(r"\b(\d+)\s*[xX]\b", text)
+        total_items += sum(float(qty) for qty in matches_x)
+
         info['Total Qty/LPN'] = total_items
 
         # Containers & weight
@@ -562,6 +568,7 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
 
