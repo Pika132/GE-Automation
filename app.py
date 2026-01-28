@@ -192,7 +192,7 @@ def extract_info(text):
             info["Ship To"] = None
 
         # Total items
-        qty = re.search(r"\b(\d+)\s*EA\b", text)
+        qty = re.search(r"\b(\d+)\s*(EA|DMQ)\b", text, re.IGNORECASE)
         if not qty:
             qty = re.search(r"\b(\d+)\s*[xX]\b", text)
         total_items = float(qty.group(1)) if qty else 0
@@ -562,6 +562,7 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5151, debug=True)
+
 
 
 
